@@ -92,7 +92,10 @@ def create_callbacks(model, training_model, prediction_model, validation_generat
                 args.snapshot_path,
                 '{backbone}_{dataset_type}_{{epoch:02d}}.h5'.format(backbone=args.backbone, dataset_type=args.dataset_type)
             ),
-            verbose=1
+            verbose=1,
+            save_best_only=True,
+            monitor="mAP",
+            mode='max'
         )
         checkpoint = RedirectModel(checkpoint, prediction_model)
         callbacks.append(checkpoint)
@@ -124,16 +127,23 @@ def create_callbacks(model, training_model, prediction_model, validation_generat
         evaluation = RedirectModel(evaluation, prediction_model)
         callbacks.append(evaluation)
 
-    callbacks.append(keras.callbacks.ReduceLROnPlateau(
-        monitor  = 'loss',
-        factor   = 0.1,
-        patience = 2,
-        verbose  = 1,
-        mode     = 'auto',
-        epsilon  = 0.0001,
-        cooldown = 0,
-        min_lr   = 0
-    ))
+    if args.lr_reduce:
+        callbacks.append(keras.callbacks.ReduceLROnPlateau(
+            monitor  = 'mAP',
+            factor   = 0.9,
+            patience = 2,
+            verbose  = 1,
+            mode     = 'max',
+            epsilon  = 0.0001,
+            cooldown = 0,
+            min_lr   = 0
+        ))
+    if args.early_stopping:
+        callbacks.append(keras.callbacks.EarlyStopping(
+            monitor='mAP',
+            patience=args.early_stopping,
+            mode='max'
+        ))
 
     return callbacks
 
@@ -221,6 +231,8 @@ def parse_args(args):
     parser.add_argument('--steps',           help='Number of steps per epoch.', type=int, default=10000)
     parser.add_argument('--snapshot-path',   help='Path to store snapshots of models during training (defaults to \'./snapshots\')', default='./snapshots')
     parser.add_argument('--tensorboard-dir', help='Log directory for Tensorboard output', default='./logs')
+    parser.add_argument('--lr-reduce', help='Reduce learning rate when a metric has stopped improving', action='store_true')
+    parser.add_argument('--early-stopping', help='Number of epoch for stop training when a monitored quantity has stopped improving', type=int, required=False)
     parser.add_argument('--no-snapshots',    help='Disable saving snapshots.', dest='snapshots', action='store_false')
     parser.add_argument('--no-evaluation',   help='Disable per epoch evaluation.', dest='evaluation', action='store_false')
     parser.add_argument('--freeze-backbone', help='Freeze training of backbone layers.', action='store_true')
